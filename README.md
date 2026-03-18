@@ -10,6 +10,11 @@ Discover the best fun zones and upcoming events in any city, with real-time buzz
 - **Upcoming Events** — Aggregates events from PredictHQ and Google Events (via SerpAPI) with deduplication
 - **Buzz Score** — Scores any event from 0–100 using Google Trends, News Coverage, Reddit discussions, and Time Proximity
 
+
+https://github.com/user-attachments/assets/9142376f-e618-4a29-b56b-9577cf23cd93
+
+
+
 ---
 
 ## Architecture
