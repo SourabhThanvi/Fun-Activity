@@ -1,0 +1,28 @@
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: fun_user
+      POSTGRES_PASSWORD: fun_secret_123
+      POSTGRES_DB: fun_activity
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fun_user -d fun_activity"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: .
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fun_user:fun_secret_123@postgres:5432/fun_activity
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - .:/app

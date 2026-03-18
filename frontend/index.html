@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FunActivity — City Buzz Explorer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* Subtle grid background */
+    body {
+      background-color: #080f1e;
+      background-image:
+        linear-gradient(rgba(99,102,241,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99,102,241,0.04) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* Shimmer skeleton */
+    @keyframes shimmer {
+      0%   { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+    .skeleton {
+      background: linear-gradient(90deg, #1e293b 25%, #2d3f55 50%, #1e293b 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.6s infinite;
+      border-radius: 12px;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #080f1e; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+    /* Tab panels */
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* Gauge transition */
+    #gauge-fill { transition: stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1); }
+
+    /* Bar transition */
+    .score-bar-inner { transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
+
+    /* Glow on high buzz */
+    .glow-emerald { box-shadow: 0 0 20px rgba(16,185,129,0.15); }
+    .glow-yellow  { box-shadow: 0 0 20px rgba(245,158,11,0.15); }
+    .glow-orange  { box-shadow: 0 0 20px rgba(249,115,22,0.12); }
+    .glow-red     { box-shadow: 0 0 20px rgba(239,68,68,0.12); }
+
+    /* Hover card lift */
+    .card-hover { transition: transform 0.15s ease, border-color 0.15s ease; }
+    .card-hover:hover { transform: translateY(-1px); }
+
+    /* Line clamp */
+    .line-clamp-2 {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+  </style>
+</head>
+
+<body class="text-slate-100 min-h-screen font-sans antialiased">
+
+  <!-- ─── NAVBAR ────────────────────────────────────────────────────── -->
+  <nav class="border-b border-slate-800/70 bg-[#080f1e]/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-15 flex items-center justify-between py-3">
+
+      <!-- Logo -->
+      <div class="flex items-center gap-2.5">
+        <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-lg shadow-lg shadow-indigo-900/50">🎪</div>
+        <span class="font-bold text-base tracking-tight">
+          <span class="text-indigo-400">Fun</span><span class="text-white">Activity</span>
+        </span>
+      </div>
+
+      <!-- Tabs -->
+      <div class="flex gap-1 bg-slate-800/60 rounded-xl p-1 border border-slate-700/50">
+        <button onclick="switchTab('explore')" id="tab-explore"
+          class="px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all">
+          🗺️ <span class="hidden sm:inline">Explore</span>
+        </button>
+        <button onclick="switchTab('buzz')" id="tab-buzz"
+          class="px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all text-slate-400 hover:text-white">
+          ⚡ <span class="hidden sm:inline">Buzz</span>
+        </button>
+        <button onclick="switchTab('dashboard')" id="tab-dashboard"
+          class="px-3 sm:px-4 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all text-slate-400 hover:text-white">
+          📊 <span class="hidden sm:inline">Dashboard</span>
+        </button>
+      </div>
+
+      <!-- API status -->
+      <div class="flex items-center gap-2 text-xs text-slate-500">
+        <span id="health-dot" class="w-2 h-2 rounded-full bg-slate-600 transition-colors"></span>
+        <span id="health-text" class="hidden sm:inline">Connecting…</span>
+      </div>
+    </div>
+  </nav>
+
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 py-8">
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB 1 — EXPLORE
+    ═══════════════════════════════════════════════════════════════ -->
+    <div id="panel-explore" class="tab-panel active">
+
+      <!-- Hero search -->
+      <div class="text-center mb-10">
+        <h1 class="text-3xl sm:text-4xl font-bold mb-3 tracking-tight">
+          Discover <span class="text-indigo-400">Your City</span>
+        </h1>
+        <p class="text-slate-400 text-sm mb-7">Fun zones, events, and buzz — all in one place</p>
+
+        <div class="flex gap-2 max-w-xl mx-auto">
+          <input id="city-input" type="text" placeholder="Try: Jaipur, Mumbai, Delhi, London…"
+            class="flex-1 bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-sm
+                   focus:outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20
+                   placeholder-slate-500 transition-all"
+            onkeydown="if(event.key==='Enter') searchCity()" />
+          <button onclick="searchCity()"
+            class="bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white
+                   px-5 py-3 rounded-xl text-sm font-semibold transition-colors
+                   shadow-lg shadow-indigo-900/40 flex items-center gap-2 whitespace-nowrap">
+            <span id="search-btn-text">Search</span>
+          </button>
+        </div>
+
+        <!-- Quick city chips -->
+        <div class="flex flex-wrap justify-center gap-2 mt-4">
+          <span class="text-xs text-slate-500 self-center">Quick:</span>
+          <button onclick="quickSearch('Jaipur')"   class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-1 rounded-full transition-colors">Jaipur</button>
+          <button onclick="quickSearch('Mumbai')"   class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-1 rounded-full transition-colors">Mumbai</button>
+          <button onclick="quickSearch('Delhi')"    class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-1 rounded-full transition-colors">Delhi</button>
+          <button onclick="quickSearch('Bangalore')" class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-1 rounded-full transition-colors">Bangalore</button>
+          <button onclick="quickSearch('Goa')"      class="text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 px-3 py-1 rounded-full transition-colors">Goa</button>
+        </div>
+      </div>
+
+      <!-- Explore error -->
+      <div id="explore-error" class="hidden max-w-2xl mx-auto mb-4 bg-red-950/40 border border-red-800/50 text-red-300 rounded-xl px-4 py-3 text-sm flex gap-2 items-start">
+        <span>⚠️</span><span id="explore-error-text"></span>
+      </div>
+
+      <!-- Loading skeletons -->
+      <div id="explore-loading" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="space-y-3">
+          <div class="skeleton h-6 w-32"></div>
+          <div class="skeleton h-28"></div>
+          <div class="skeleton h-28"></div>
+          <div class="skeleton h-28"></div>
+        </div>
+        <div class="space-y-3">
+          <div class="skeleton h-6 w-36"></div>
+          <div class="skeleton h-24"></div>
+          <div class="skeleton h-24"></div>
+          <div class="skeleton h-24"></div>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="explore-results" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <!-- Fun Zones -->
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold flex items-center gap-2">
+              🎡 Fun Zones
+              <span id="fz-count" class="text-xs text-slate-400 font-normal bg-slate-800 px-2 py-0.5 rounded-full"></span>
+            </h2>
+            <span class="text-xs text-slate-500">Ranked by Bayesian score</span>
+          </div>
+          <div id="fz-list" class="space-y-3 max-h-[700px] overflow-y-auto pr-1"></div>
+        </div>
+
+        <!-- Events -->
+        <div>
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold flex items-center gap-2">
+              🎭 Upcoming Events
+              <span id="ev-count" class="text-xs text-slate-400 font-normal bg-slate-800 px-2 py-0.5 rounded-full"></span>
+            </h2>
+            <span class="text-xs text-slate-500">Sorted by PHQ rank</span>
+          </div>
+          <div id="ev-list" class="space-y-3 max-h-[700px] overflow-y-auto pr-1"></div>
+        </div>
+      </div>
+
+      <!-- Empty / initial state -->
+      <div id="explore-empty" class="text-center py-24">
+        <div class="text-7xl mb-5 opacity-80">🌆</div>
+        <p class="text-lg font-medium text-slate-300">Search a city to explore</p>
+        <p class="text-sm text-slate-500 mt-2">Discover ranked fun zones, live events, and social buzz</p>
+      </div>
+
+    </div>
+
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB 2 — BUZZ ANALYZER
+    ═══════════════════════════════════════════════════════════════ -->
+    <div id="panel-buzz" class="tab-panel">
+      <div class="max-w-2xl mx-auto">
+
+        <!-- Header -->
+        <div class="text-center mb-8">
+          <h1 class="text-3xl font-bold mb-2">⚡ Buzz Analyzer</h1>
+          <p class="text-slate-400 text-sm">Real-time social signal scoring for any event</p>
+        </div>
+
+        <!-- Form -->
+        <div class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-6 mb-5 shadow-xl">
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            <div class="sm:col-span-1">
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">Event Name <span class="text-indigo-400">*</span></label>
+              <input id="buzz-event" type="text" placeholder="Jaipur Literature Festival"
+                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm
+                       focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30
+                       placeholder-slate-600 transition-all" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">City <span class="text-indigo-400">*</span></label>
+              <input id="buzz-city" type="text" placeholder="Jaipur"
+                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm
+                       focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30
+                       placeholder-slate-600 transition-all" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1.5">Event Date <span class="text-slate-600">(optional)</span></label>
+              <input id="buzz-date" type="date"
+                class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2.5 text-sm
+                       focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500/30
+                       transition-all text-slate-300" />
+            </div>
+          </div>
+
+          <button onclick="analyzeBuzz()" id="buzz-btn"
+            class="w-full bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white
+                   py-3 rounded-xl text-sm font-semibold transition-colors
+                   shadow-lg shadow-indigo-900/40 flex items-center justify-center gap-2">
+            <span id="buzz-spinner" class="hidden w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+            <span id="buzz-btn-text">⚡ Analyze Buzz</span>
+          </button>
+        </div>
+
+        <!-- Buzz error -->
+        <div id="buzz-error" class="hidden mb-4 bg-red-950/40 border border-red-800/50 text-red-300 rounded-xl px-4 py-3 text-sm flex gap-2">
+          <span>⚠️</span><span id="buzz-error-text"></span>
+        </div>
+
+        <!-- Buzz results -->
+        <div id="buzz-results" class="hidden space-y-4">
+
+          <!-- Score card -->
+          <div id="buzz-score-card" class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-6 shadow-xl">
+            <div class="flex flex-col sm:flex-row items-center gap-6">
+
+              <!-- SVG Gauge -->
+              <div class="flex-shrink-0">
+                <svg width="180" height="106" viewBox="0 0 180 106">
+                  <!-- Track -->
+                  <path d="M 18 92 A 72 72 0 0 0 162 92"
+                    fill="none" stroke="#1e293b" stroke-width="12" stroke-linecap="round"/>
+                  <!-- Fill (animated) -->
+                  <path id="gauge-fill" d="M 18 92 A 72 72 0 0 0 162 92"
+                    fill="none" stroke="#6366f1" stroke-width="12" stroke-linecap="round"
+                    stroke-dasharray="226" stroke-dashoffset="226"/>
+                  <!-- Score number -->
+                  <text id="gauge-score" x="90" y="82" text-anchor="middle"
+                    fill="white" font-size="30" font-weight="700" font-family="ui-monospace,monospace">0</text>
+                  <!-- Level label -->
+                  <text id="gauge-level" x="90" y="100" text-anchor="middle"
+                    fill="#64748b" font-size="10" font-weight="600" letter-spacing="0.05em">MINIMAL</text>
+                </svg>
+              </div>
+
+              <!-- Info panel -->
+              <div class="flex-1 text-center sm:text-left">
+                <p class="text-xs text-slate-500 uppercase tracking-wider mb-1">Buzz Analysis</p>
+                <h2 id="buzz-result-event" class="text-xl font-bold mb-0.5 leading-snug"></h2>
+                <p id="buzz-result-city" class="text-slate-400 text-sm mb-4"></p>
+
+                <div class="flex flex-wrap gap-2">
+                  <span id="badge-level"   class="px-3 py-1 rounded-full text-xs font-bold border"></span>
+                  <span id="badge-sources" class="px-3 py-1 rounded-full text-xs font-medium bg-slate-800 text-slate-300 border border-slate-700"></span>
+                  <span id="badge-scored"  class="px-3 py-1 rounded-full text-xs text-slate-500 bg-slate-800/50 border border-slate-700/50"></span>
+                </div>
+
+                <p class="text-xs text-slate-600 mt-4 leading-relaxed">
+                  Scored from Google Trends · News · Reddit · Time Proximity.<br/>
+                  Weights redistributed when a source has no data.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Breakdown -->
+          <div class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-6 shadow-xl">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Score Breakdown</h3>
+            <div id="breakdown-bars" class="space-y-3.5"></div>
+          </div>
+
+          <!-- Evidence -->
+          <div class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-6 shadow-xl">
+            <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-4">Evidence</h3>
+            <div id="evidence-list" class="divide-y divide-slate-800"></div>
+          </div>
+
+        </div>
+
+        <!-- Buzz empty -->
+        <div id="buzz-empty" class="text-center py-20">
+          <div class="text-6xl mb-5 opacity-70">⚡</div>
+          <p class="text-lg font-medium text-slate-300">Analyze any event's buzz</p>
+          <p class="text-sm text-slate-500 mt-2">Enter an event name and city to get social signal data</p>
+        </div>
+
+      </div>
+    </div>
+
+
+    <!-- ═══════════════════════════════════════════════════════════════
+         TAB 3 — DASHBOARD
+    ═══════════════════════════════════════════════════════════════ -->
+    <div id="panel-dashboard" class="tab-panel">
+
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold mb-1">📊 Dashboard</h1>
+        <p class="text-sm text-slate-400">Cached data overview</p>
+      </div>
+
+      <!-- Stat cards -->
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-5 shadow-lg">
+          <div class="text-2xl mb-2">🏙️</div>
+          <div id="dash-cities" class="text-3xl font-bold text-indigo-400 mb-1">—</div>
+          <div class="text-xs text-slate-500">Cities Indexed</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-5 shadow-lg">
+          <div class="text-2xl mb-2">🎡</div>
+          <div id="dash-zones" class="text-3xl font-bold text-emerald-400 mb-1">—</div>
+          <div class="text-xs text-slate-500">Fun Zones Ranked</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-5 shadow-lg">
+          <div class="text-2xl mb-2">🎭</div>
+          <div id="dash-events" class="text-3xl font-bold text-amber-400 mb-1">—</div>
+          <div class="text-xs text-slate-500">Events Tracked</div>
+        </div>
+        <div class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-5 shadow-lg">
+          <div class="text-2xl mb-2">⚡</div>
+          <div id="dash-buzz" class="text-3xl font-bold text-pink-400 mb-1">—</div>
+          <div class="text-xs text-slate-500">Buzz Scores</div>
+        </div>
+      </div>
+
+      <!-- Cities table -->
+      <div class="bg-slate-900/60 border border-slate-700/70 rounded-2xl p-6 shadow-xl">
+        <div class="flex items-center justify-between mb-5">
+          <h2 class="font-semibold text-sm">Indexed Cities</h2>
+          <button onclick="toggleAddCity()"
+            class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-800/50 hover:border-indigo-600/50
+                   px-3 py-1.5 rounded-lg transition-all">+ Add City</button>
+        </div>
+
+        <!-- Add city form -->
+        <div id="add-city-form" class="hidden mb-4 flex gap-2">
+          <input id="new-city-name" type="text" placeholder="City name (e.g. Pune)"
+            class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm
+                   focus:outline-none focus:border-indigo-500 placeholder-slate-600 transition-all"
+            onkeydown="if(event.key==='Enter') addCity()" />
+          <input id="new-city-state" type="text" placeholder="State (optional)"
+            class="w-28 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm
+                   focus:outline-none focus:border-indigo-500 placeholder-slate-600 transition-all hidden sm:block" />
+          <button onclick="addCity()"
+            class="bg-indigo-600 hover:bg-indigo-500 px-4 py-2 rounded-lg text-sm font-medium transition-colors">Save</button>
+          <button onclick="toggleAddCity()"
+            class="text-slate-400 hover:text-white px-2 py-2 rounded-lg transition-colors text-lg leading-none">✕</button>
+        </div>
+        <div id="add-city-error" class="hidden text-xs text-red-400 mb-3 px-1"></div>
+
+        <div id="city-list" class="space-y-1"></div>
+        <div id="city-list-empty" class="hidden text-center py-10 text-slate-500 text-sm">
+          <div class="text-3xl mb-2">🏙️</div>
+          No cities cached yet. Search a city in Explore to index it.
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+
+  <!-- ─── JAVASCRIPT ──────────────────────────────────────────────── -->
+  <script>
+    const API = 'http://localhost:8000';
+
+    // ── Color maps (inline styles to avoid Tailwind CDN scan issues)
+    const LEVEL_COLOR = {
+      High:    { gauge: '#10b981', bg: 'rgba(16,185,129,0.12)', text: '#6ee7b7', border: 'rgba(16,185,129,0.3)',  glow: '#10b981' },
+      Medium:  { gauge: '#f59e0b', bg: 'rgba(245,158,11,0.12)', text: '#fcd34d', border: 'rgba(245,158,11,0.3)',  glow: '#f59e0b' },
+      Low:     { gauge: '#f97316', bg: 'rgba(249,115,22,0.12)', text: '#fdba74', border: 'rgba(249,115,22,0.3)',  glow: '#f97316' },
+      Minimal: { gauge: '#ef4444', bg: 'rgba(239,68,68,0.12)',  text: '#fca5a5', border: 'rgba(239,68,68,0.25)', glow: '#ef4444' },
+    };
+
+    const BAR_COLOR = (v) =>
+      v >= 70 ? '#10b981' : v >= 45 ? '#6366f1' : v >= 20 ? '#f59e0b' : '#475569';
+
+    const CATEGORY_EMOJI = {
+      festivals: '🎉', concerts: '🎵', sports: '⚽', conferences: '💼',
+      expos: '🏛️', 'performing-arts': '🎭', 'food-beverage': '🍽️',
+      community: '👥', academic: '🎓',
+      'Adventure & Theme Parks': '🎢', 'Indoor Entertainment': '🕹️',
+      'Nightlife': '🌙', 'Outdoors & Nature': '🌿',
+      'Sports & Recreation': '⚽', 'Culture & Heritage': '🏛️',
+      'Sightseeing': '📸', 'Shopping & Markets': '🛍️',
+      'Food & Dining': '🍽️', 'Wellness': '💆',
+      'General Entertainment': '🎪',
+    };
+
+    const PRICE_COLOR = {
+      Free: '#34d399', Affordable: '#4ade80',
+      'Semi-Premium': '#fbbf24', Premium: '#fb923c', Luxury: '#f87171',
+    };
+
+    // ── Utilities ──────────────────────────────────────────────────
+    const $  = id => document.getElementById(id);
+    const show = id => $(id)?.classList.remove('hidden');
+    const hide = id => $(id)?.classList.add('hidden');
+
+    function fmt(n) {
+      if (n == null) return '—';
+      if (n >= 1e6) return (n/1e6).toFixed(1) + 'M';
+      if (n >= 1e3) return (n/1e3).toFixed(1) + 'K';
+      return String(n);
+    }
+
+    function fmtDate(s) {
+      if (!s) return '';
+      try {
+        return new Date(s).toLocaleDateString('en-IN', {day:'numeric', month:'short', year:'numeric'});
+      } catch { return s; }
+    }
+
+    function fmtDateTime(s) {
+      if (!s) return '';
+      try {
+        return new Date(s).toLocaleString('en-IN', {
+          day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'
+        });
+      } catch { return s; }
+    }
+
+    function catEmoji(c) { return CATEGORY_EMOJI[c] || '📍'; }
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    // ── Health check ───────────────────────────────────────────────
+    async function checkHealth() {
+      try {
+        const r = await fetch(`${API}/health`, { signal: AbortSignal.timeout(4000) });
+        if (r.ok) {
+          $('health-dot').style.background = '#10b981';
+          $('health-text').textContent = 'API Online';
+        } else throw new Error();
+      } catch {
+        $('health-dot').style.background = '#ef4444';
+        $('health-text').textContent = 'API Offline';
+      }
+    }
+
+    // ── Tab switching ──────────────────────────────────────────────
+    function switchTab(tab) {
+      ['explore','buzz','dashboard'].forEach(t => {
+        $(`panel-${t}`).classList.remove('active');
+        const btn = $(`tab-${t}`);
+        btn.style.background = '';
+        btn.style.color = '#94a3b8';
+      });
+      $(`panel-${tab}`).classList.add('active');
+      const btn = $(`tab-${tab}`);
+      btn.style.background = 'rgba(99,102,241,0.2)';
+      btn.style.color = '#c7d2fe';
+      if (tab === 'dashboard') loadDashboard();
+    }
+
+    // ── Explore ────────────────────────────────────────────────────
+    let currentCity = '';
+
+    function quickSearch(city) {
+      $('city-input').value = city;
+      searchCity();
+    }
+
+    async function searchCity() {
+      const city = $('city-input').value.trim();
+      if (!city) return;
+      currentCity = city;
+
+      hide('explore-empty');
+      hide('explore-error');
+      hide('explore-results');
+      show('explore-loading');
+      $('search-btn-text').textContent = 'Searching…';
+
+      const [fzRes, evRes] = await Promise.allSettled([
+        fetch(`${API}/funzones/?city=${encodeURIComponent(city)}`),
+        fetch(`${API}/events/?city=${encodeURIComponent(city)}`),
+      ]);
+
+      hide('explore-loading');
+      show('explore-results');
+      $('search-btn-text').textContent = 'Search';
+
+      // Fun Zones
+      if (fzRes.status === 'fulfilled' && fzRes.value.ok) {
+        const zones = await fzRes.value.json();
+        $('fz-count').textContent = zones.length;
+        $('fz-list').innerHTML = zones.length
+          ? zones.map(renderFunZone).join('')
+          : emptyBox('No fun zones found for this city');
+      } else {
+        const msg = await extractMsg(fzRes);
+        $('fz-list').innerHTML = errorBox(msg);
+      }
+
+      // Events
+      if (evRes.status === 'fulfilled' && evRes.value.ok) {
+        const events = await evRes.value.json();
+        $('ev-count').textContent = events.length;
+        $('ev-list').innerHTML = events.length
+          ? events.map(renderEvent).join('')
+          : emptyBox('No upcoming events found for this city');
+      } else {
+        const msg = await extractMsg(evRes);
+        $('ev-list').innerHTML = errorBox(msg);
+      }
+    }
+
+    async function extractMsg(settled) {
+      if (settled.status === 'rejected') return 'Connection failed — is the API running?';
+      try {
+        const j = await settled.value.json();
+        return j.detail || 'Request failed';
+      } catch { return 'Request failed'; }
+    }
+
+    function emptyBox(msg) {
+      return `<div class="text-center py-10 border border-dashed border-slate-700 rounded-xl text-slate-500 text-sm">
+        <div class="text-3xl mb-2">🔍</div><p>${esc(msg)}</p></div>`;
+    }
+
+    function errorBox(msg) {
+      return `<div class="text-center py-10 border border-dashed border-red-900/50 rounded-xl text-red-400/80 text-sm">
+        <div class="text-3xl mb-2">⚠️</div><p>${esc(msg)}</p></div>`;
+    }
+
+    function renderFunZone(z) {
+      const score = Math.round(z.rank_score || 0);
+      const rating = (z.rating || 0).toFixed(1);
+      const stars = rating > 0
+        ? '★'.repeat(Math.min(Math.round(z.rating), 5)) + '☆'.repeat(Math.max(5 - Math.round(z.rating), 0))
+        : '';
+      const priceColor = PRICE_COLOR[z.price_label] || '#94a3b8';
+      const barPct = Math.min(score, 100);
+
+      return `
+        <div class="card-hover bg-slate-900/50 border border-slate-700/60 hover:border-indigo-600/40 rounded-xl p-4">
+          <div class="flex items-start justify-between mb-2">
+            <div class="flex items-start gap-2 flex-1 min-w-0">
+              <span class="text-slate-600 text-xs font-mono pt-0.5 flex-shrink-0 w-5 text-right">#${z.rank_position}</span>
+              <span class="font-semibold text-sm leading-snug">${esc(z.name)}</span>
+            </div>
+            <span class="text-xs font-semibold flex-shrink-0 ml-2" style="color:${priceColor}">${esc(z.price_label || '—')}</span>
+          </div>
+
+          ${rating > 0 ? `
+          <div class="flex items-center gap-2 mb-2 pl-7">
+            <span class="text-yellow-400 text-xs font-bold">${rating}</span>
+            <span class="text-yellow-400/70 text-xs tracking-tighter">${stars}</span>
+            <span class="text-slate-500 text-xs">${fmt(z.review_count)} reviews</span>
+          </div>` : ''}
+
+          <div class="flex flex-wrap gap-1.5 mb-3 pl-7">
+            <span class="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700/50">
+              ${catEmoji(z.category)} ${esc(z.category)}
+            </span>
+            ${z.photos_count > 0 ? `<span class="text-xs text-slate-500">📷 ${fmt(z.photos_count)}</span>` : ''}
+          </div>
+
+          <div class="pl-7">
+            <div class="w-full bg-slate-800 rounded-full h-1.5 mb-1">
+              <div class="h-1.5 rounded-full score-bar-inner" style="width:${barPct}%; background:#6366f1;"></div>
+            </div>
+            <div class="flex justify-between items-center text-xs text-slate-500">
+              <span class="truncate max-w-[200px]" title="${esc(z.address)}">${esc(z.address || '—')}</span>
+              <span class="font-mono flex-shrink-0 ml-2">${score}/100</span>
+            </div>
+          </div>
+
+          ${z.website || z.phone ? `
+          <div class="pl-7 mt-2 flex gap-3">
+            ${z.website ? `<a href="${esc(z.website)}" target="_blank" rel="noopener noreferrer" class="text-xs text-indigo-400 hover:text-indigo-300 transition-colors">🔗 Website</a>` : ''}
+            ${z.phone ? `<span class="text-xs text-slate-500">📞 ${esc(z.phone)}</span>` : ''}
+          </div>` : ''}
+        </div>`;
+    }
+
+    // Store events for buzz prefill
+    const eventStore = {};
+
+    function renderEvent(e) {
+      eventStore[e.id] = e;
+      const rankVal = e.phq_rank;
+      let rankBg = 'background:rgba(71,85,105,0.4); color:#94a3b8; border-color:#475569';
+      if (rankVal >= 70) rankBg = 'background:rgba(16,185,129,0.15); color:#6ee7b7; border-color:rgba(16,185,129,0.3)';
+      else if (rankVal >= 40) rankBg = 'background:rgba(245,158,11,0.15); color:#fcd34d; border-color:rgba(245,158,11,0.3)';
+
+      return `
+        <div class="card-hover bg-slate-900/50 border border-slate-700/60 hover:border-slate-600/60 rounded-xl p-4 cursor-pointer group"
+             onclick="prefillBuzz(${e.id})">
+          <div class="flex items-start justify-between gap-2 mb-2">
+            <span class="font-semibold text-sm leading-snug flex-1">${esc(e.title)}</span>
+            ${rankVal != null ? `
+              <span class="flex-shrink-0 text-xs font-bold px-2 py-0.5 rounded-full border"
+                    style="${rankBg}">PHQ ${rankVal}</span>` : ''}
+          </div>
+
+          <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-400 mb-2">
+            ${e.event_date ? `<span>📅 ${fmtDate(e.event_date)}</span>` : ''}
+            ${e.venue    ? `<span class="truncate max-w-[160px]">📍 ${esc(e.venue)}</span>` : ''}
+            ${e.category ? `<span class="bg-slate-800 text-slate-300 px-2 py-0.5 rounded-full border border-slate-700/50">
+              ${catEmoji(e.category)} ${esc(e.category)}</span>` : ''}
+          </div>
+
+          ${e.phq_attendance > 0 ? `
+          <div class="text-xs text-slate-500 mb-1">
+            👥 ~${fmt(e.phq_attendance)} expected attendance
+          </div>` : ''}
+
+          ${e.description ? `
+          <div class="text-xs text-slate-500 line-clamp-2 mb-2">${esc(e.description)}</div>` : ''}
+
+          <div class="text-xs text-indigo-400/50 group-hover:text-indigo-400/80 transition-colors flex items-center gap-1">
+            <span>⚡ Click to analyze buzz</span>
+          </div>
+        </div>`;
+    }
+
+    function prefillBuzz(eventId) {
+      const e = eventStore[eventId];
+      if (!e) return;
+      $('buzz-event').value = e.title;
+      $('buzz-city').value  = currentCity;
+      if (e.event_date) $('buzz-date').value = (e.event_date || '').substring(0, 10);
+      switchTab('buzz');
+    }
+
+    // ── Buzz Analyzer ──────────────────────────────────────────────
+    async function analyzeBuzz() {
+      const event_name = $('buzz-event').value.trim();
+      const city_name  = $('buzz-city').value.trim();
+      const event_date = $('buzz-date').value;
+
+      if (!event_name || !city_name) {
+        show('buzz-error');
+        $('buzz-error-text').textContent = 'Please enter both event name and city.';
+        return;
+      }
+
+      hide('buzz-error');
+      hide('buzz-empty');
+      hide('buzz-results');
+      $('buzz-spinner').classList.remove('hidden');
+      $('buzz-btn-text').textContent = 'Analyzing…';
+      $('buzz-btn').disabled = true;
+
+      try {
+        const r = await fetch(`${API}/buzz/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event_name, city_name, event_date }),
+        });
+
+        if (!r.ok) {
+          const err = await r.json().catch(() => ({ detail: 'Unknown error' }));
+          throw new Error(err.detail || 'Request failed');
+        }
+
+        const data = await r.json();
+        renderBuzzResult(data, event_name, city_name);
+        show('buzz-results');
+
+      } catch (err) {
+        show('buzz-error');
+        $('buzz-error-text').textContent = err.message || 'Connection failed. Is the backend running?';
+        show('buzz-empty');
+      } finally {
+        $('buzz-spinner').classList.add('hidden');
+        $('buzz-btn-text').textContent = '⚡ Analyze Buzz';
+        $('buzz-btn').disabled = false;
+      }
+    }
+
+    function renderBuzzResult(data, eventName, cityName) {
+      const score = Math.round(data.buzz_score || 0);
+      const level = data.buzz_level || 'Minimal';
+      const c = LEVEL_COLOR[level] || LEVEL_COLOR.Minimal;
+
+      // Gauge — arc length ≈ 226 for r=72 semicircle
+      const arcLen = 226;
+      const offset = arcLen - (score / 100) * arcLen;
+      const fill = $('gauge-fill');
+      fill.setAttribute('stroke-dashoffset', arcLen); // reset first
+      fill.setAttribute('stroke', c.gauge);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { fill.setAttribute('stroke-dashoffset', offset); });
+      });
+
+      $('gauge-score').textContent = score;
+      $('gauge-level').textContent = level.toUpperCase();
+      $('gauge-level').setAttribute('fill', c.gauge);
+
+      // Score card glow
+      $('buzz-score-card').style.boxShadow = `0 0 30px ${c.glow}20`;
+      $('buzz-score-card').style.borderColor = `${c.border}`;
+
+      // Info
+      $('buzz-result-event').textContent = eventName;
+      $('buzz-result-city').textContent  = '📍 ' + cityName;
+
+      // Badges
+      const lb = $('badge-level');
+      lb.textContent = level + ' Buzz';
+      lb.style.cssText = `background:${c.bg}; color:${c.text}; border-color:${c.border}; padding:2px 12px; border-radius:9999px; font-weight:700; font-size:0.75rem;`;
+
+      $('badge-sources').textContent = `${data.sources_available ?? 0} sources active`;
+
+      const sa = $('badge-scored');
+      if (data.scored_at) {
+        sa.textContent = 'Scored ' + fmtDateTime(data.scored_at);
+      } else {
+        hide('badge-scored');
+      }
+
+      // Breakdown bars
+      const SOURCES = [
+        { key: 'google_trends',  label: '📈 Google Trends',   weight: '25%' },
+        { key: 'news_coverage',  label: '📰 News Coverage',   weight: '25%' },
+        { key: 'reddit_buzz',    label: '💬 Reddit',          weight: '20%' },
+        { key: 'time_proximity', label: '⏰ Time Proximity',  weight: '10%' },
+      ];
+
+      $('breakdown-bars').innerHTML = SOURCES.map(s => {
+        const val = Math.round(data.breakdown?.[s.key] || 0);
+        const barColor = BAR_COLOR(val);
+        return `
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <span class="text-xs text-slate-300">${s.label}</span>
+              <div class="flex items-center gap-2">
+                <span class="text-xs text-slate-600">${s.weight}</span>
+                <span class="text-xs font-mono text-slate-300 w-6 text-right">${val}</span>
+              </div>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-2">
+              <div class="h-2 rounded-full score-bar-inner" style="width:${val}%; background:${barColor};"></div>
+            </div>
+          </div>`;
+      }).join('');
+
+      // Evidence
+      const ev = data.evidence || {};
+      const EV_META = [
+        { key: 'google_trends',  icon: '📈', label: 'Google Trends' },
+        { key: 'news_coverage',  icon: '📰', label: 'News Coverage' },
+        { key: 'reddit_buzz',    icon: '💬', label: 'Reddit' },
+        { key: 'time_proximity', icon: '⏰', label: 'Time Proximity' },
+      ];
+
+      $('evidence-list').innerHTML = EV_META.map(m => {
+        const e = ev[m.key] || {};
+        let body = '';
+
+        if (e.status === 'unavailable') {
+          body = `<span style="color:#64748b">${esc(e.reason || 'No data')}</span>`;
+        } else if (m.key === 'google_trends') {
+          const score_val = e.interest_score ?? 0;
+          const trending  = e.is_trending ? '↑ Trending' : 'Not trending';
+          const related   = (e.related_queries || []).slice(0, 3).join(', ');
+          body = `Peak interest: <b>${score_val}</b> · ${trending}` +
+                 (related ? `<br/><span style="color:#818cf8">Related: ${esc(related)}</span>` : '');
+        } else if (m.key === 'news_coverage') {
+          const cnt = e.article_count || 0;
+          const src = (e.top_sources || []).filter(Boolean).slice(0, 3).join(', ');
+          body = `<b>${cnt}</b> article${cnt !== 1 ? 's' : ''} found` +
+                 (src ? ` · Sources: <b>${esc(src)}</b>` : '');
+        } else if (m.key === 'reddit_buzz') {
+          if (!e.total_posts) {
+            body = `<span style="color:#64748b">No Reddit discussion found</span>`;
+          } else {
+            const subs = (e.subreddits || []).slice(0, 3).map(s => `r/${s}`).join(', ');
+            body = `<b>${e.total_posts}</b> threads · <b>${fmt(e.total_upvotes)}</b> upvotes · <b>${fmt(e.total_comments)}</b> comments` +
+                   (subs ? `<br/><span style="color:#94a3b8">${esc(subs)}</span>` : '');
+          }
+        } else if (m.key === 'time_proximity') {
+          if (e.days_until != null) {
+            body = e.days_until > 0
+              ? `Event in <b>${e.days_until}</b> day${e.days_until !== 1 ? 's' : ''}`
+              : `<span style="color:#64748b">Event has passed</span>`;
+          } else {
+            body = `<span style="color:#64748b">${esc(e.status || 'Date unknown')}</span>`;
+          }
+        }
+
+        return `
+          <div class="flex items-start gap-3 py-3">
+            <span class="text-xl flex-shrink-0 mt-0.5">${m.icon}</span>
+            <div class="flex-1 min-w-0">
+              <p class="text-xs font-semibold text-slate-300 mb-0.5">${m.label}</p>
+              <p class="text-xs text-slate-400 leading-relaxed">${body}</p>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    // ── Dashboard ──────────────────────────────────────────────────
+    let addCityOpen = false;
+
+    async function loadDashboard() {
+      try {
+        const [dash, cities] = await Promise.all([
+          fetch(`${API}/dashboard`).then(r => r.json()),
+          fetch(`${API}/cities/`).then(r => r.json()),
+        ]);
+
+        $('dash-cities').textContent = dash.total_cities       ?? '—';
+        $('dash-zones').textContent  = dash.total_fun_zones    ?? '—';
+        $('dash-events').textContent = dash.total_events       ?? '—';
+        $('dash-buzz').textContent   = dash.total_buzz_scores  ?? '—';
+
+        if (!cities || cities.length === 0) {
+          $('city-list').innerHTML = '';
+          show('city-list-empty');
+        } else {
+          hide('city-list-empty');
+          $('city-list').innerHTML = cities.map(c => `
+            <div class="flex items-center justify-between px-3 py-2.5 rounded-xl
+                        hover:bg-slate-800/50 transition-colors group">
+              <div class="flex items-center gap-3">
+                <div class="w-2 h-2 rounded-full bg-indigo-500/60 flex-shrink-0"></div>
+                <span class="font-medium text-sm text-slate-200">${esc(c.name)}</span>
+                ${c.state   ? `<span class="text-slate-500 text-xs">${esc(c.state)}</span>` : ''}
+                <span class="text-slate-700 text-xs">${esc(c.country)}</span>
+              </div>
+              <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onclick="exploreCity('${esc(c.name)}')"
+                  class="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-800/50 px-2.5 py-1 rounded-lg transition-all hover:border-indigo-600/50">
+                  Explore →
+                </button>
+              </div>
+            </div>`).join('');
+        }
+      } catch (err) {
+        console.error('Dashboard load error:', err);
+      }
+    }
+
+    function exploreCity(name) {
+      $('city-input').value = name;
+      switchTab('explore');
+      searchCity();
+    }
+
+    function toggleAddCity() {
+      addCityOpen = !addCityOpen;
+      addCityOpen ? show('add-city-form') : hide('add-city-form');
+      hide('add-city-error');
+      if (!addCityOpen) { $('new-city-name').value = ''; }
+    }
+
+    async function addCity() {
+      const name  = $('new-city-name').value.trim();
+      const state = $('new-city-state')?.value.trim() || '';
+      hide('add-city-error');
+
+      if (!name) {
+        show('add-city-error');
+        $('add-city-error').textContent = 'Please enter a city name.';
+        return;
+      }
+
+      try {
+        const r = await fetch(`${API}/cities/`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, state, country: 'India' }),
+        });
+
+        if (r.status === 409) {
+          show('add-city-error');
+          $('add-city-error').textContent = `"${name}" is already indexed.`;
+          return;
+        }
+        if (!r.ok) throw new Error();
+
+        toggleAddCity();
+        loadDashboard();
+      } catch {
+        show('add-city-error');
+        $('add-city-error').textContent = 'Failed to add city. Is the API running?';
+      }
+    }
+
+    // ── Init ───────────────────────────────────────────────────────
+    checkHealth();
+    setInterval(checkHealth, 30000);
+
+    // Style initial active tab
+    const initBtn = $('tab-explore');
+    initBtn.style.background = 'rgba(99,102,241,0.2)';
+    initBtn.style.color = '#c7d2fe';
+  </script>
+
+</body>
+</html>
