@@ -69,7 +69,6 @@ Fun-Activity/
 | `fun_zones` | Ranked venues with scores, ratings, category |
 | `events` | Upcoming events from PredictHQ + Google Events |
 | `buzz_scores` | Historical buzz scores per event |
-| `users` | Auth — reserved for Phase 3 |
 
 ---
 
@@ -224,18 +223,3 @@ To connect to Claude Desktop, add this to your `claude_desktop_config.json`:
 ```
 
 ---
-
-## Roadmap
-
-| Phase | Status | Description |
-|-------|--------|-------------|
-| Phase 1 | Done | MCP Server — 3 tools, live data sources, buzz scoring |
-| Phase 2 | Done | FastAPI backend + PostgreSQL + Docker |
-| Phase 3 | Planned | React + Tailwind frontend dashboard |
-| Phase 4 | Planned | User auth, saved cities, personalized recommendations |
-
----
-
-## License
-
-MIT
